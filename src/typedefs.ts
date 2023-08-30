@@ -128,7 +128,7 @@ type ObjectToCanvasElementExtraOptions = ToCanvasElementExtraOptions & {
   viewportTransform: boolean;
   /**
    * The context to draw the object onto.
-   * Supports passing a pdf/svg ctx to in node.
+   * Supports passing a pdf/svg ctx in node.
    * @see https://github.com/Automattic/node-canvas#createcanvas
    */
   ctx: CanvasRenderingContext2D;
