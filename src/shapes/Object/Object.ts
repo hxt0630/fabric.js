@@ -1364,7 +1364,7 @@ export class FabricObject<
     viewportTransform,
     format,
     multiplier,
-    canvasElement,
+    ctx,
     ...options
   }: ObjectToCanvasElementOptions = {}) {
     const origParams = saveObjectTransform(this),
@@ -1433,7 +1433,7 @@ export class FabricObject<
     const canvasEl = canvas.toCanvasElement(
       (multiplier || 1) * retinaScaling,
       options,
-      canvasElement
+      ctx
     );
     this.set('canvas', originalCanvas);
     this.shadow = originalShadow;

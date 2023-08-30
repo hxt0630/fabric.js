@@ -1,17 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { Canvas } from 'canvas';
 import * as fabric from 'fabric/node';
-import { createWriteStream } from 'fs';
+import { createWriteStream, writeFileSync } from 'fs';
 import { ensureDirSync } from 'fs-extra';
 import path from 'path';
 
 import '../../setup/setupCoverage';
 
 test.describe('Exporting node canvas', () => {
-  const generateCanvas = () => {
+  const generateCanvas = (type: 'pdf' | 'svg') => {
     const canvas = new fabric.StaticCanvas(null, {
       width: 1000,
       height: 1000,
+      enableRetinaScaling: false,
     });
     const rect = new fabric.Rect({ width: 50, height: 50, fill: 'red' });
     const path = fabric.util.getSmoothPathFromPoints([
@@ -27,20 +28,26 @@ test.describe('Exporting node canvas', () => {
       path: new fabric.Path(path),
     });
     canvas.add(rect, text);
-    canvas.renderAll();
-    return canvas;
-  };
-
-  test('SVG', async ({ page }) => {
-    const canvas = generateCanvas();
+    const ctx = new Canvas(0, 0, type).getContext('2d');
+    ctx.textDrawingMode = 'glyph';
     const size = {
       width: 460,
       height: 450,
     };
-    const svg = canvas.toCanvasElement(1, size, new Canvas(0, 0, 'svg'));
-    expect(svg).toMatchObject(size);
+    const out = canvas.toCanvasElement(1, size, ctx);
+    expect(out).toMatchObject(size);
+    return out;
+  };
+
+  test('SVG', async ({ page }, testInfo) => {
+    const svg = generateCanvas('svg');
     const buf = svg.toBuffer();
-    expect(buf).toMatchSnapshot();
+    ensureDirSync(testInfo.outputDir);
+    const pathTo = path.resolve(testInfo.outputDir, 'output.svg');
+    writeFileSync(pathTo, buf);
+    testInfo.attach('output', {
+      body: buf,
+    });
     await page.goto(
       `data:image/svg+xml,${encodeURIComponent(buf.toString())
         .replace(/'/g, '%27')
@@ -48,20 +55,12 @@ test.describe('Exporting node canvas', () => {
       { waitUntil: 'load' }
     );
     expect(
-      await page.screenshot({ clip: { x: 0, y: 0, ...size } })
+      await page.screenshot({ clip: { x: 0, y: 0, width: 460, height: 450 } })
     ).toMatchSnapshot();
   });
 
   test('PDF', async ({ page }, testInfo) => {
-    const canvas = generateCanvas();
-    const pdf = canvas.toCanvasElement(
-      1,
-      {
-        width: 460,
-        height: 450,
-      },
-      new Canvas(0, 0, 'pdf')
-    );
+    const pdf = generateCanvas('pdf');
     // attach
     ensureDirSync(testInfo.outputDir);
     const pathTo = path.resolve(testInfo.outputDir, 'output.pdf');
@@ -72,6 +71,7 @@ test.describe('Exporting node canvas', () => {
     });
     testInfo.attach('output', {
       path: pathTo,
+      contentType: 'application/pdf',
     });
     // test
     await page.goto(
