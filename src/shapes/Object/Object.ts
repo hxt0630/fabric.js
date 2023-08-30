@@ -19,6 +19,8 @@ import type {
   TCacheCanvasDimensions,
   Abortable,
   TOptions,
+  ObjectToCanvasElementOptions,
+  ObjectToDataUrlOptions,
 } from '../../typedefs';
 import { classRegistry } from '../../ClassRegistry';
 import { runningAnimations } from '../../util/animation/AnimationRegistry';
@@ -1334,7 +1336,7 @@ export class FabricObject<
    * @param {Boolean} [options.withoutShadow] Remove current object shadow. Introduced in 2.4.2
    * @return {Image} Object cloned as image.
    */
-  cloneAsImage(options: any): Image {
+  cloneAsImage(options: ObjectToCanvasElementOptions): Image {
     const canvasEl = this.toCanvasElement(options);
     // TODO: how to import Image w/o an import cycle?
     const ImageClass = classRegistry.getClass('image');
@@ -1355,23 +1357,30 @@ export class FabricObject<
    * @param {Boolean} [options.viewportTransform] Account for canvas viewport transform
    * @return {HTMLCanvasElement} Returns DOM element <canvas> with the FabricObject
    */
-  toCanvasElement(options: any = {}) {
+  toCanvasElement({
+    enableRetinaScaling,
+    withoutTransform,
+    withoutShadow,
+    viewportTransform,
+    format,
+    multiplier,
+    canvasElement,
+    ...options
+  }: ObjectToCanvasElementOptions = {}) {
     const origParams = saveObjectTransform(this),
       originalGroup = this.group,
       originalShadow = this.shadow,
-      abs = Math.abs,
-      retinaScaling = options.enableRetinaScaling
+      retinaScaling = enableRetinaScaling
         ? Math.max(config.devicePixelRatio, 1)
-        : 1,
-      multiplier = (options.multiplier || 1) * retinaScaling;
+        : 1;
     delete this.group;
-    if (options.withoutTransform) {
+    if (withoutTransform) {
       resetObjectTransform(this);
     }
-    if (options.withoutShadow) {
+    if (withoutShadow) {
       this.shadow = null;
     }
-    if (options.viewportTransform) {
+    if (viewportTransform) {
       sendObjectToPlane(this, this.getViewportTransform());
     }
 
@@ -1388,9 +1397,13 @@ export class FabricObject<
         : this.getObjectScaling();
       // consider non scaling shadow.
       shadowOffset.x =
-        2 * Math.round(abs(shadow.offsetX) + shadowBlur) * abs(scaling.x);
+        2 *
+        Math.round(Math.abs(shadow.offsetX) + shadowBlur) *
+        Math.abs(scaling.x);
       shadowOffset.y =
-        2 * Math.round(abs(shadow.offsetY) + shadowBlur) * abs(scaling.y);
+        2 *
+        Math.round(Math.abs(shadow.offsetY) + shadowBlur) *
+        Math.abs(scaling.y);
     }
     const width = boundingRect.width + shadowOffset.x,
       height = boundingRect.height + shadowOffset.y;
@@ -1403,7 +1416,7 @@ export class FabricObject<
       renderOnAddRemove: false,
       skipOffscreen: false,
     });
-    if (options.format === 'jpeg') {
+    if (format === 'jpeg') {
       canvas.backgroundColor = '#fff';
     }
     this.setPositionByOrigin(
@@ -1417,7 +1430,11 @@ export class FabricObject<
     canvas._objects = [this];
     this.set('canvas', canvas);
     this.setCoords();
-    const canvasEl = canvas.toCanvasElement(multiplier || 1, options);
+    const canvasEl = canvas.toCanvasElement(
+      (multiplier || 1) * retinaScaling,
+      options,
+      canvasElement
+    );
     this.set('canvas', originalCanvas);
     this.shadow = originalShadow;
     if (originalGroup) {
@@ -1449,7 +1466,7 @@ export class FabricObject<
    * @param {Boolean} [options.withoutShadow] Remove current object shadow. Introduced in 2.4.2
    * @return {String} Returns a data: URL containing a representation of the object in the format specified by options.format
    */
-  toDataURL(options: any = {}) {
+  toDataURL(options: ObjectToDataUrlOptions = {}) {
     return toDataURL(
       this.toCanvasElement(options),
       options.format || 'png',
