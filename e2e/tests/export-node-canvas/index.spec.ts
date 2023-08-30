@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { Page, TestInfo, expect, test } from '@playwright/test';
 import { Canvas } from 'canvas';
 import * as fabric from 'fabric/node';
 import { createWriteStream, writeFileSync } from 'fs';
@@ -8,7 +8,12 @@ import path from 'path';
 import '../../setup/setupCoverage';
 
 test.describe('Exporting node canvas', () => {
-  const generateCanvas = (type: 'pdf' | 'svg') => {
+  const size = {
+    width: 460,
+    height: 450,
+  };
+
+  const createCanvas = () => {
     const canvas = new fabric.StaticCanvas(null, {
       width: 1000,
       height: 1000,
@@ -28,63 +33,104 @@ test.describe('Exporting node canvas', () => {
       path: new fabric.Path(path),
     });
     canvas.add(rect, text);
-    const ctx = new Canvas(0, 0, type).getContext('2d');
-    ctx.textDrawingMode = 'glyph';
-    const size = {
-      width: 460,
-      height: 450,
-    };
-    const out = canvas.toCanvasElement(1, size, ctx);
-    expect(out).toMatchObject(size);
-    return out;
+    return canvas;
   };
 
-  test('SVG', async ({ page }, testInfo) => {
-    const svg = generateCanvas('svg');
-    const buf = svg.toBuffer();
-    ensureDirSync(testInfo.outputDir);
-    const pathTo = path.resolve(testInfo.outputDir, 'output.svg');
-    writeFileSync(pathTo, buf);
-    testInfo.attach('output', {
-      body: buf,
+  const createCtxForExport = (type: 'pdf' | 'svg') => {
+    const ctx = new Canvas(0, 0, type).getContext('2d');
+    ctx.textDrawingMode = 'glyph';
+    return ctx;
+  };
+
+  test.describe('SVG', () => {
+    const attachSVG = async (result: Canvas, testInfo: TestInfo) => {
+      ensureDirSync(testInfo.outputDir);
+      const pathTo = path.resolve(testInfo.outputDir, 'output.svg');
+      writeFileSync(pathTo, result.toBuffer());
+      await testInfo.attach('output', {
+        path: pathTo,
+      });
+    };
+
+    const testSVG = async (page: Page, result: Canvas) => {
+      await page.goto(
+        `data:image/svg+xml,${encodeURIComponent(result.toBuffer().toString())
+          .replace(/'/g, '%27')
+          .replace(/"/g, '%22')}`,
+        { waitUntil: 'load' }
+      );
+      expect(
+        await page.screenshot({
+          clip: { x: 0, y: 0, width: 460, height: 450 },
+        })
+      ).toMatchSnapshot();
+    };
+
+    test('canvas', async ({ page }, testInfo) => {
+      const ctx = createCtxForExport('svg');
+      const result = createCanvas().toCanvasElement(1, size, ctx);
+      expect(result).toMatchObject(size);
+      await attachSVG(result, testInfo);
+      await testSVG(page, result);
     });
-    await page.goto(
-      `data:image/svg+xml,${encodeURIComponent(buf.toString())
-        .replace(/'/g, '%27')
-        .replace(/"/g, '%22')}`,
-      { waitUntil: 'load' }
-    );
-    expect(
-      await page.screenshot({ clip: { x: 0, y: 0, width: 460, height: 450 } })
-    ).toMatchSnapshot();
+
+    test('object', async ({ page }, testInfo) => {
+      const ctx = createCtxForExport('svg');
+      const result = createCanvas()
+        .item(1)
+        .toCanvasElement({ ...size, ctx });
+      expect(result).toMatchObject(size);
+      await attachSVG(result, testInfo);
+      await testSVG(page, result);
+    });
   });
 
-  test('PDF', async ({ page }, testInfo) => {
-    const pdf = generateCanvas('pdf');
-    // attach
-    ensureDirSync(testInfo.outputDir);
-    const pathTo = path.resolve(testInfo.outputDir, 'output.pdf');
-    const out = createWriteStream(pathTo);
-    await new Promise((resolve) => {
-      out.on('finish', resolve);
-      pdf.createPDFStream().pipe(out);
+  test.describe('PDF', () => {
+    const attachPDF = async (result: Canvas, testInfo: TestInfo) => {
+      ensureDirSync(testInfo.outputDir);
+      const pathTo = path.resolve(testInfo.outputDir, 'output.pdf');
+      const out = createWriteStream(pathTo);
+      await new Promise((resolve) => {
+        out.on('finish', resolve);
+        result.createPDFStream().pipe(out);
+      });
+      await testInfo.attach('output', {
+        path: pathTo,
+        contentType: 'application/pdf',
+      });
+    };
+
+    const testPDF = async (page: Page, result: Canvas) => {
+      await page.goto(
+        `data:application/pdf;base64,${Buffer.from(result.toBuffer()).toString(
+          'base64'
+        )}`,
+        { waitUntil: 'load' }
+      );
+      await page.waitForTimeout(5000);
+      expect(
+        await page.screenshot({
+          clip: { x: 80, y: 25, width: 500, height: 500 },
+        })
+      ).toMatchSnapshot();
+    };
+
+    test('canvas', async ({ page }, testInfo) => {
+      const ctx = createCtxForExport('pdf');
+      const result = createCanvas().toCanvasElement(1, size, ctx);
+      expect(result).toMatchObject(size);
+      await attachPDF(result, testInfo);
+      await testPDF(page, result);
     });
-    testInfo.attach('output', {
-      path: pathTo,
-      contentType: 'application/pdf',
+
+    test('object', async ({ page }, testInfo) => {
+      const ctx = createCtxForExport('pdf');
+      const result = createCanvas()
+        .item(1)
+        .toCanvasElement({ ...size, ctx });
+      expect(result).toMatchObject(size);
+      await attachPDF(result, testInfo);
+      await testPDF(page, result);
     });
-    // test
-    await page.goto(
-      `data:application/pdf;base64,${Buffer.from(pdf.toBuffer()).toString(
-        'base64'
-      )}`,
-      { waitUntil: 'load' }
-    );
-    await page.waitForTimeout(5000);
-    expect(
-      await page.screenshot({
-        clip: { x: 80, y: 25, width: 500, height: 500 },
-      })
-    ).toMatchSnapshot();
   });
 });
