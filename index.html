@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  <head> </head>
+  <body>
+    <canvas id="canvas" width="600" height="800"></canvas>
+
+    <script src="dist/fabric.js"></script>
+    <script>
+      var canvas = new fabric.Canvas("canvas");
+
+      // var rect = new fabric.Rect({
+      //   top: 100,
+      //   left: 100,
+      //   width: 60,
+      //   height: 70,
+      //   fill: "red",
+      // });
+      const textObject = new fabric.IText("中国万里长城", {
+        top: 200,
+        left: 100,
+        height: 400,
+        originY: "center",
+        originX: "center",
+        angle: 90,
+        fontSize: 80,
+        charSpacing: 300,
+        vertical: true,
+        fill: '#ffb608',
+  id: 'material_local_2',
+  stroke: '#000000',
+  paintFirst: 'stroke',
+  strokeWidth: 15,
+      });
+      canvas.add(textObject);
+      canvas.setActiveObject(textObject);
+    </script>
+  </body>
+</html>
